@@ -1,0 +1,500 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Event Management Platform - Fargate Reporting Service'
+
+Parameters:
+  Environment:
+    Description: Deployment environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  EventsTableArn:
+    Description: ARN of the Events DynamoDB table
+    Type: String
+  RegistrationsTableArn:
+    Description: ARN of the Registrations DynamoDB table
+    Type: String
+  EventBusArn:
+    Description: ARN of the EventBridge event bus
+    Type: String
+  EventsTableName:
+    Description: Name of the Events DynamoDB table
+    Type: String
+  RegistrationsTableName:
+    Description: Name of the Registrations DynamoDB table
+    Type: String
+  EventBusName:
+    Description: Name of the EventBridge event bus
+    Type: String
+
+Resources:
+  # VPC for Fargate
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-vpc-${Environment}'
+
+  # Subnets for Fargate
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-public-subnet-1-${Environment}'
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-public-subnet-2-${Environment}'
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-igw-${Environment}'
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-public-rt-${Environment}'
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group
+  FargateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Fargate service
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-management-fargate-sg-${Environment}'
+
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'event-management-cluster-${Environment}'
+      CapacityProviders:
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+
+  # ECR Repository
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'event-management-reporting-${Environment}'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the latest 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  # IAM Role for Fargate Task Execution
+  FargateExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ECRAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: '*'
+      
+  # IAM Role for Fargate Task
+  FargateTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBReadAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Ref EventsTableArn
+                  - !Ref RegistrationsTableArn
+                  - !Sub '${EventsTableArn}/index/*'
+                  - !Sub '${RegistrationsTableArn}/index/*'
+        - PolicyName: EventBridgeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Ref EventBusArn
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  # ECS Task Definition
+  ReportingTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'event-management-reporting-${Environment}'
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt FargateExecutionRole.Arn
+      TaskRoleArn: !GetAtt FargateTaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Sub 'reporting-container-${Environment}'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest'
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ReportingLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: 'ecs'
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+          Environment:
+            - Name: EVENTS_TABLE
+              Value: !Ref EventsTableName
+            - Name: REGISTRATIONS_TABLE
+              Value: !Ref RegistrationsTableName
+            - Name: EVENT_BUS_NAME
+              Value: !Ref EventBusName
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:80/health || exit 1
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+
+  # CloudWatch Log Group
+  ReportingLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/event-management-reporting-${Environment}'
+      RetentionInDays: 30
+
+  # Application Load Balancer
+  ReportingLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'event-reporting-alb-${Environment}'
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref FargateSecurityGroup
+      Type: application
+      IpAddressType: ipv4
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-reporting-alb-${Environment}'
+
+  ReportingTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub 'event-reporting-tg-${Environment}'
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub 'event-reporting-tg-${Environment}'
+
+  ReportingListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ReportingTargetGroup
+      LoadBalancerArn: !Ref ReportingLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # Fargate Service
+  ReportingService:
+    Type: AWS::ECS::Service
+    DependsOn: ReportingListener
+    Properties:
+      ServiceName: !Sub 'event-management-reporting-${Environment}'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref ReportingTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref FargateSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+      LoadBalancers:
+        - ContainerName: !Sub 'reporting-container-${Environment}'
+          ContainerPort: 80
+          TargetGroupArn: !Ref ReportingTargetGroup
+      SchedulingStrategy: REPLICA
+      DeploymentController:
+        Type: ECS
+
+  # EventBridge Rule to trigger Fargate Reporting Task on schedule
+  ReportGenerationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'report-generation-rule-${Environment}'
+      Description: 'Rule to trigger report generation on a schedule'
+      ScheduleExpression: 'rate(1 day)'
+      State: ENABLED
+      Targets:
+        - Id: ReportingFargateTask
+          Arn: !GetAtt ECSCluster.Arn
+          RoleArn: !GetAtt EventBridgeECSRole.Arn
+          EcsParameters:
+            TaskDefinitionArn: !Ref ReportingTaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: ENABLED
+                SecurityGroups:
+                  - !Ref FargateSecurityGroup
+                Subnets:
+                  - !Ref PublicSubnet1
+                  - !Ref PublicSubnet2
+
+  # IAM Role for EventBridge to trigger ECS Task
+  EventBridgeECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ECSTaskExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Ref ReportingTaskDefinition
+                Condition:
+                  ArnLike:
+                    ecs:cluster: !GetAtt ECSCluster.Arn
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt FargateExecutionRole.Arn
+                  - !GetAtt FargateTaskRole.Arn
+
+  # EventBridge Rule to capture API Reporting Requests
+  ReportingAPIRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'reporting-api-rule-${Environment}'
+      Description: 'Rule to capture API reporting requests'
+      EventBusName: !Ref EventBusName
+      EventPattern:
+        source:
+          - "event-management-platform"
+        detail-type:
+          - "GenerateReport"
+      State: ENABLED
+      Targets:
+        - Id: GenerateReportTask
+          Arn: !GetAtt ECSCluster.Arn
+          RoleArn: !GetAtt EventBridgeECSRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              "reportType": "$.detail.reportType"
+              "parameters": "$.detail.parameters"
+            InputTemplate: |
+              {
+                "containerOverrides": [
+                  {
+                    "name": "reporting-container-${Environment}",
+                    "environment": [
+                      {
+                        "name": "REPORT_TYPE",
+                        "value": <reportType>
+                      },
+                      {
+                        "name": "REPORT_PARAMETERS",
+                        "value": <parameters>
+                      }
+                    ]
+                  }
+                ]
+              }
+          EcsParameters:
+            TaskDefinitionArn: !Ref ReportingTaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: ENABLED
+                SecurityGroups:
+                  - !Ref FargateSecurityGroup
+                Subnets:
+                  - !Ref PublicSubnet1
+                  - !Ref PublicSubnet2
+
+Outputs:
+  ClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterName"
+  ReportingServiceName:
+    Description: ECS Service Name
+    Value: !Ref ReportingService
+    Export:
+      Name: !Sub "${AWS::StackName}-ServiceName"
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  PublicSubnet1:
+    Description: Public Subnet 1 ID
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet1"
+  PublicSubnet2:
+    Description: Public Subnet 2 ID
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet2"
+  ReportingServiceUrl:
+    Description: URL of the Reporting Service
+    Value: !Sub "http://${ReportingLoadBalancer.DNSName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ServiceUrl"
+  RepositoryUrl:
+    Description: URL of the ECR Repository
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}"
+    Export:
+      Name: !Sub "${AWS::StackName}-RepositoryUrl"

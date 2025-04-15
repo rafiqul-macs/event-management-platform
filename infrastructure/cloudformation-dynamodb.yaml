@@ -1,0 +1,294 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Event Management Platform - DynamoDB Tables'
+
+Parameters:
+  Environment:
+    Description: Deployment environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  BackupEnabled:
+    Description: Enable point-in-time recovery
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+Resources:
+  # Events Table
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'events-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: organizerId
+          AttributeType: S
+        - AttributeName: eventDate
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: OrganizerIndex
+          KeySchema:
+            - AttributeName: organizerId
+              KeyType: HASH
+            - AttributeName: eventDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: StatusDateIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: eventDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !Ref BackupEnabled
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: EventManagementPlatform
+
+  # Users Table
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'users-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+        - AttributeName: userType
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserTypeIndex
+          KeySchema:
+            - AttributeName: userType
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !Ref BackupEnabled
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: EventManagementPlatform
+
+  # Registrations Table
+  RegistrationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'registrations-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: eventId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: registrationDate
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EventRegistrations
+          KeySchema:
+            - AttributeName: eventId
+              KeyType: HASH
+            - AttributeName: registrationDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserRegistrations
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: registrationDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !Ref BackupEnabled
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: EventManagementPlatform
+
+  # Reports Table - For storing generated reports
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'reports-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: reportType
+          AttributeType: S
+        - AttributeName: creationDate
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ReportTypeIndex
+          KeySchema:
+            - AttributeName: reportType
+              KeyType: HASH
+            - AttributeName: creationDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserReportsIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: creationDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !Ref BackupEnabled
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: EventManagementPlatform
+
+  # Audit Table - For tracking changes to entities
+  AuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'audit-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: entityId
+          AttributeType: S
+        - AttributeName: entityType
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EntityAuditIndex
+          KeySchema:
+            - AttributeName: entityId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: EntityTypeIndex
+          KeySchema:
+            - AttributeName: entityType
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !Ref BackupEnabled
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: EventManagementPlatform
+      TimeToLiveSpecification:
+        AttributeName: expiryTime
+        Enabled: true
+
+Outputs:
+  EventsTableName:
+    Description: DynamoDB table for events
+    Value: !Ref EventsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-EventsTableName"
+  EventsTableArn:
+    Description: ARN for Events DynamoDB table
+    Value: !GetAtt EventsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EventsTableArn"
+  UsersTableName:
+    Description: DynamoDB table for users
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub "${AWS::StackName}-UsersTableName"
+  UsersTableArn:
+    Description: ARN for Users DynamoDB table
+    Value: !GetAtt UsersTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-UsersTableArn"
+  RegistrationsTableName:
+    Description: DynamoDB table for registrations
+    Value: !Ref RegistrationsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-RegistrationsTableName"
+  RegistrationsTableArn:
+    Description: ARN for Registrations DynamoDB table
+    Value: !GetAtt RegistrationsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RegistrationsTableArn"
+  ReportsTableName:
+    Description: DynamoDB table for reports
+    Value: !Ref ReportsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-ReportsTableName"
+  ReportsTableArn:
+    Description: ARN for Reports DynamoDB table
+    Value: !GetAtt ReportsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ReportsTableArn"
+  AuditTableName:
+    Description: DynamoDB table for audit trail
+    Value: !Ref AuditTable
+    Export:
+      Name: !Sub "${AWS::StackName}-AuditTableName"
+  AuditTableArn:
+    Description: ARN for Audit DynamoDB table
+    Value: !GetAtt AuditTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AuditTableArn"

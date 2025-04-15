@@ -1,0 +1,438 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Event Management Platform - Lambda Functions'
+
+Parameters:
+  Environment:
+    Description: Deployment environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+  EventsTableName:
+    Description: DynamoDB table for events
+    Type: String
+  UsersTableName:
+    Description: DynamoDB table for users
+    Type: String
+  RegistrationsTableName:
+    Description: DynamoDB table for registrations
+    Type: String
+  ReportsTableName:
+    Description: DynamoDB table for reports
+    Type: String
+  AuditTableName:
+    Description: DynamoDB table for audit trail
+    Type: String
+  AssetsBucketName:
+    Description: S3 bucket for assets
+    Type: String
+  EventBusName:
+    Description: EventBridge event bus name
+    Type: String
+  EventsTableArn:
+    Description: ARN for Events DynamoDB table
+    Type: String
+  UsersTableArn:
+    Description: ARN for Users DynamoDB table
+    Type: String
+  RegistrationsTableArn:
+    Description: ARN for Registrations DynamoDB table
+    Type: String
+  ReportsTableArn:
+    Description: ARN for Reports DynamoDB table
+    Type: String
+  AuditTableArn:
+    Description: ARN for Audit DynamoDB table
+    Type: String
+  AssetsBucketArn:
+    Description: ARN for S3 assets bucket
+    Type: String
+  EventBusArn:
+    Description: ARN for EventBridge event bus
+    Type: String
+
+Resources:
+  # IAM Role for Lambda Functions with basic permissions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EventBridgeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                  - events:DescribeRule
+                Resource: 
+                  - !Ref EventBusArn
+                  - !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/${EventBusName}/*'
+        - PolicyName: XRayAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: '*'
+
+  # Event Service Lambda Function
+  EventServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'event-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Event Service received event:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+              body: JSON.stringify({ message: 'Event Service called' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          EVENTS_TABLE: !Ref EventsTableName
+          REGISTRATIONS_TABLE: !Ref RegistrationsTableName
+          AUDIT_TABLE: !Ref AuditTableName
+          ASSETS_BUCKET: !Ref AssetsBucketName
+          ENVIRONMENT: !Ref Environment
+          EVENT_BUS_NAME: !Ref EventBusName
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: EventService
+
+  # User Service Lambda Function
+  UserServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'user-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('User Service received event:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+              body: JSON.stringify({ message: 'User Service called' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTableName
+          REGISTRATIONS_TABLE: !Ref RegistrationsTableName
+          AUDIT_TABLE: !Ref AuditTableName
+          ENVIRONMENT: !Ref Environment
+          EVENT_BUS_NAME: !Ref EventBusName
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: UserService
+
+  # Notification Service Lambda Function
+  NotificationServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'notification-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Notification received:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return { 
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Notification processed' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTableName
+          EVENTS_TABLE: !Ref EventsTableName
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: NotificationService
+
+  # Audit Service Lambda Function
+  AuditServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'audit-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Audit Service received event:', JSON.stringify(event));
+            
+            // In a real implementation, this would record all changes to entities in the audit table
+            // For now, we just log the event and return success
+            
+            return { 
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Audit recorded' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          AUDIT_TABLE: !Ref AuditTableName
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: AuditService
+
+  # EventBridge Rule for Audit Trail
+  AuditRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'audit-rule-${Environment}'
+      Description: 'Rule to capture events for audit trail'
+      EventBusName: !Ref EventBusName
+      EventPattern:
+        source:
+          - "event-management-platform"
+        detail-type:
+          - "EventCreated"
+          - "EventUpdated"
+          - "EventCancelled"
+          - "UserCreated"
+          - "UserUpdated"
+          - "UserDeleted"
+          - "UserRegistered"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AuditServiceFunction.Arn
+          Id: AuditTarget
+
+  # Lambda Permission for Audit Service
+  AuditServicePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuditServiceFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AuditRule.Arn
+
+  # EventBridge Rule for Notifications
+  NotificationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'notification-rule-${Environment}'
+      Description: 'Rule to capture events for notifications'
+      EventBusName: !Ref EventBusName
+      EventPattern:
+        source:
+          - "event-management-platform"
+        detail-type:
+          - "EventCreated"
+          - "EventUpdated"
+          - "EventCancelled"
+          - "UserRegistered"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt NotificationServiceFunction.Arn
+          Id: NotificationTarget
+
+  # Lambda Permission for Notification Service
+  NotificationServicePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref NotificationServiceFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NotificationRule.Arn
+
+  # CloudWatch Alarm for Event Service Errors
+  EventServiceErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'event-service-errors-${Environment}'
+      AlarmDescription: 'Alarm if Event Service errors exceed threshold'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EventServiceFunction
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for User Service Errors
+  UserServiceErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'user-service-errors-${Environment}'
+      AlarmDescription: 'Alarm if User Service errors exceed threshold'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref UserServiceFunction
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for Notification Service Errors
+  NotificationServiceErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'notification-service-errors-${Environment}'
+      AlarmDescription: 'Alarm if Notification Service errors exceed threshold'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref NotificationServiceFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  EventServiceFunctionName:
+    Description: Name of the Event Service Lambda Function
+    Value: !Ref EventServiceFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-EventServiceFunctionName"
+  EventServiceFunctionArn:
+    Description: ARN of the Event Service Lambda Function
+    Value: !GetAtt EventServiceFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EventServiceFunctionArn"
+  UserServiceFunctionName:
+    Description: Name of the User Service Lambda Function
+    Value: !Ref UserServiceFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-UserServiceFunctionName"
+  UserServiceFunctionArn:
+    Description: ARN of the User Service Lambda Function
+    Value: !GetAtt UserServiceFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-UserServiceFunctionArn"
+  NotificationServiceFunctionName:
+    Description: Name of the Notification Service Lambda Function
+    Value: !Ref NotificationServiceFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-NotificationServiceFunctionName"
+  NotificationServiceFunctionArn:
+    Description: ARN of the Notification Service Lambda Function
+    Value: !GetAtt NotificationServiceFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-NotificationServiceFunctionArn"
+  AuditServiceFunctionName:
+    Description: Name of the Audit Service Lambda Function
+    Value: !Ref AuditServiceFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-AuditServiceFunctionName"
+  AuditServiceFunctionArn:
+    Description: ARN of the Audit Service Lambda Function
+    Value: !GetAtt AuditServiceFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AuditServiceFunctionArn"
+  LambdaExecutionRoleArn:
+    Description: ARN of the Lambda Execution Role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaExecutionRoleArn"Name: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Ref EventsTableArn
+                  - !Ref UsersTableArn
+                  - !Ref RegistrationsTableArn
+                  - !Ref ReportsTableArn
+                  - !Ref AuditTableArn
+                  - !Sub '${EventsTableArn}/index/*'
+                  - !Sub '${UsersTableArn}/index/*'
+                  - !Sub '${RegistrationsTableArn}/index/*'
+                  - !Sub '${ReportsTableArn}/index/*'
+                  - !Sub '${AuditTableArn}/index/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Ref AssetsBucketArn
+                  - !Sub '${AssetsBucketArn}/*'
+        - Policy

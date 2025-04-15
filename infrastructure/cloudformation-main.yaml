@@ -1,0 +1,708 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Event Management Platform - Main Stack'
+
+Parameters:
+  Environment:
+    Description: Deployment environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  # S3 Bucket for storing event images and documents
+  EventAssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'event-management-assets-${Environment}-${AWS::AccountId}'
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3600
+
+  # DynamoDB Tables
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'events-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: organizerId
+          AttributeType: S
+        - AttributeName: eventDate
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: OrganizerIndex
+          KeySchema:
+            - AttributeName: organizerId
+              KeyType: HASH
+            - AttributeName: eventDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'users-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  RegistrationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'registrations-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: eventId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EventRegistrations
+          KeySchema:
+            - AttributeName: eventId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserRegistrations
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # IAM Role for Lambda Functions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt EventsTable.Arn
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt RegistrationsTable.Arn
+                  - !Sub '${EventsTable.Arn}/index/*'
+                  - !Sub '${UsersTable.Arn}/index/*'
+                  - !Sub '${RegistrationsTable.Arn}/index/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub '${EventAssetsBucket.Arn}/*'
+        - PolicyName: EventBridgeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: '*'
+
+  # Lambda Functions
+  EventServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'event-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Event Service received event:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+              body: JSON.stringify({ message: 'Event Service called' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          EVENTS_TABLE: !Ref EventsTable
+          REGISTRATIONS_TABLE: !Ref RegistrationsTable
+          ASSETS_BUCKET: !Ref EventAssetsBucket
+          ENVIRONMENT: !Ref Environment
+          EVENT_BUS_NAME: !Ref EventBus
+
+  UserServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'user-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('User Service received event:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+              body: JSON.stringify({ message: 'User Service called' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          ENVIRONMENT: !Ref Environment
+          EVENT_BUS_NAME: !Ref EventBus
+
+  NotificationServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'notification-service-${Environment}'
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Notification received:', JSON.stringify(event));
+            
+            // This is a placeholder. Real code would be deployed separately
+            return { 
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Notification processed' })
+            };
+          };
+      Runtime: nodejs16.x
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          EVENTS_TABLE: !Ref EventsTable
+          ENVIRONMENT: !Ref Environment
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'event-management-api-${Environment}'
+      Description: API Gateway for Event Management Platform
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Event Endpoints
+  EventsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'events'
+      
+  EventsGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventServiceFunction.Arn}/invocations'
+
+  EventsPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventServiceFunction.Arn}/invocations'
+  
+  EventsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Event ID Endpoint
+  EventIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref EventsResource
+      PathPart: '{id}'
+
+  EventIdGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventIdResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventServiceFunction.Arn}/invocations'
+
+  EventIdPutMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventIdResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventServiceFunction.Arn}/invocations'
+
+  EventIdDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventIdResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EventServiceFunction.Arn}/invocations'
+      
+  EventIdOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref EventIdResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # User Endpoints
+  UsersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: 'users'
+      
+  UsersGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UsersResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserServiceFunction.Arn}/invocations'
+
+  UsersPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UsersResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserServiceFunction.Arn}/invocations'
+  
+  UsersOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UsersResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # User ID Endpoint
+  UserIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref UsersResource
+      PathPart: '{id}'
+
+  UserIdGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UserIdResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserServiceFunction.Arn}/invocations'
+
+  UserIdPutMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UserIdResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserServiceFunction.Arn}/invocations'
+
+  UserIdDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UserIdResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserServiceFunction.Arn}/invocations'
+      
+  UserIdOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref UserIdResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # API Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - EventsGetMethod
+      - EventsPostMethod
+      - EventIdGetMethod
+      - EventIdPutMethod
+      - EventIdDeleteMethod
+      - UsersGetMethod
+      - UsersPostMethod
+      - UserIdGetMethod
+      - UserIdPutMethod
+      - UserIdDeleteMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref Environment
+
+  # Lambda Permissions
+  EventServicePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EventServiceFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*/*'
+
+  UserServicePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UserServiceFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*/*'
+
+  # EventBridge
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub 'event-management-bus-${Environment}'
+
+  # EventBridge Rule for Notifications
+  NotificationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'notification-rule-${Environment}'
+      EventBusName: !Ref EventBus
+      EventPattern:
+        source:
+          - "event-management-platform"
+        detail-type:
+          - "EventCreated"
+          - "EventUpdated"
+          - "EventCancelled"
+          - "UserRegistered"
+      Targets:
+        - Arn: !GetAtt NotificationServiceFunction.Arn
+          Id: NotificationTarget
+
+  NotificationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref NotificationServiceFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NotificationRule.Arn
+
+  # CloudWatch Dashboard
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'EventManagementDashboard-${Environment}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${EventServiceFunction}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Event Service Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${UserServiceFunction}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "User Service Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${NotificationServiceFunction}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Notification Service Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "${ApiGateway}" ],
+                  [ ".", "4XXError", ".", "." ],
+                  [ ".", "5XXError", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "API Gateway Metrics",
+                "period": 300
+              }
+            }
+          ]
+        }
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  AssetsBucketName:
+    Description: S3 bucket for storing assets
+    Value: !Ref EventAssetsBucket
+  EventsTableName:
+    Description: DynamoDB table for events
+    Value: !Ref EventsTable
+  UsersTableName:
+    Description: DynamoDB table for users
+    Value: !Ref UsersTable
+  RegistrationsTableName:
+    Description: DynamoDB table for registrations
+    Value: !Ref RegistrationsTable
+  EventsTableArn:
+    Description: ARN for Events DynamoDB table
+    Value: !GetAtt EventsTable.Arn
+  RegistrationsTableArn:
+    Description: ARN for Registrations DynamoDB table
+    Value: !GetAtt RegistrationsTable.Arn
+  EventBusName:
+    Description: Name of the EventBridge event bus
+    Value: !Ref EventBus
+  EventBusArn:
+    Description: ARN of the EventBridge event bus
+    Value: !GetAtt EventBus.Arn
