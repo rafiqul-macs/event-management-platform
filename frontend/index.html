@@ -30,44 +30,13 @@
             </div>
             
             <div class="search-bar">
-                <input type="text" id="event-search" placeholder="Search events...">
+                <input type="text" id="event-search" placeholder="Search events by name, location, or type...">
                 <button class="btn">Search</button>
             </div>
             
             <div id="events-list" class="cards-grid">
                 <!-- Event cards will be dynamically added here -->
-                <div class="card event-card">
-                    <div class="card-image" style="background-image: url('https://via.placeholder.com/300x200')"></div>
-                    <div class="card-content">
-                        <h3>Tech Conference 2023</h3>
-                        <p class="event-date">Nov 15, 2023</p>
-                        <p class="event-location">San Francisco, CA</p>
-                        <p class="event-description">Join us for the latest in tech innovations and networking opportunities.</p>
-                        <button class="btn btn-secondary">Register</button>
-                    </div>
-                </div>
-                
-                <div class="card event-card">
-                    <div class="card-image" style="background-image: url('https://via.placeholder.com/300x200')"></div>
-                    <div class="card-content">
-                        <h3>Design Workshop</h3>
-                        <p class="event-date">Dec 5, 2023</p>
-                        <p class="event-location">New York, NY</p>
-                        <p class="event-description">Learn the latest design trends and tools in this hands-on workshop.</p>
-                        <button class="btn btn-secondary">Register</button>
-                    </div>
-                </div>
-                
-                <div class="card event-card">
-                    <div class="card-image" style="background-image: url('https://via.placeholder.com/300x200')"></div>
-                    <div class="card-content">
-                        <h3>Marketing Summit</h3>
-                        <p class="event-date">Jan 20, 2024</p>
-                        <p class="event-location">Chicago, IL</p>
-                        <p class="event-description">Discover innovative marketing strategies for the digital age.</p>
-                        <button class="btn btn-secondary">Register</button>
-                    </div>
-                </div>
+                <div class="loading">Loading events...</div>
             </div>
         </section>
 
@@ -81,38 +50,11 @@
             </div>
             
             <div id="registered-tab" class="tab-content active">
-                <div class="cards-grid">
-                    <!-- Registered events cards will be dynamically added here -->
-                    <div class="card event-card">
-                        <div class="card-image" style="background-image: url('https://via.placeholder.com/300x200')"></div>
-                        <div class="card-content">
-                            <h3>Tech Conference 2023</h3>
-                            <p class="event-date">Nov 15, 2023</p>
-                            <p class="event-location">San Francisco, CA</p>
-                            <div class="badge badge-success">Registered</div>
-                            <button class="btn btn-secondary">View Details</button>
-                        </div>
-                    </div>
-                </div>
+                <div class="loading">Loading your registrations...</div>
             </div>
             
             <div id="created-tab" class="tab-content">
-                <div class="cards-grid">
-                    <!-- Created events cards will be dynamically added here -->
-                    <div class="card event-card">
-                        <div class="card-image" style="background-image: url('https://via.placeholder.com/300x200')"></div>
-                        <div class="card-content">
-                            <h3>Design Workshop</h3>
-                            <p class="event-date">Dec 5, 2023</p>
-                            <p class="event-location">New York, NY</p>
-                            <div class="badge badge-primary">15 Registrations</div>
-                            <div class="event-actions">
-                                <button class="btn btn-secondary">Edit</button>
-                                <button class="btn btn-danger">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="loading">Loading your events...</div>
             </div>
         </section>
 
@@ -138,9 +80,6 @@
                     <label for="event-selector">Select Event:</label>
                     <select id="event-selector">
                         <option value="">-- Select an event --</option>
-                        <option value="1">Tech Conference 2023</option>
-                        <option value="2">Design Workshop</option>
-                        <option value="3">Marketing Summit</option>
                     </select>
                 </div>
                 
@@ -150,6 +89,7 @@
                         <select id="report-year">
                             <option value="2023">2023</option>
                             <option value="2024">2024</option>
+                            <option value="2025">2025</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -173,36 +113,7 @@
             </div>
             
             <div id="report-results" class="report-container" style="display: none;">
-                <h3 id="report-title">Report Title</h3>
-                <p id="report-generated">Generated: <span id="report-date"></span></p>
-                
-                <div class="report-statistics">
-                    <div class="stat-box">
-                        <h4>Total Registrations</h4>
-                        <div class="stat-value" id="stat-registrations">0</div>
-                    </div>
-                    <div class="stat-box">
-                        <h4>Checked In</h4>
-                        <div class="stat-value" id="stat-checkins">0</div>
-                    </div>
-                    <div class="stat-box">
-                        <h4>No Shows</h4>
-                        <div class="stat-value" id="stat-noshows">0</div>
-                    </div>
-                    <div class="stat-box">
-                        <h4>Check-in Rate</h4>
-                        <div class="stat-value" id="stat-rate">0%</div>
-                    </div>
-                </div>
-                
-                <div id="report-details">
-                    <!-- Report details will be added here dynamically -->
-                </div>
-                
-                <div class="report-actions">
-                    <button class="btn btn-secondary" id="download-report-btn">Download PDF</button>
-                    <button class="btn btn-secondary" id="share-report-btn">Share Report</button>
-                </div>
+                <!-- Report content will be dynamically generated -->
             </div>
         </section>
 
@@ -214,9 +125,9 @@
                 <div class="profile-header">
                     <div class="profile-image" style="background-image: url('https://via.placeholder.com/150')"></div>
                     <div class="profile-info">
-                        <h3 id="profile-name">John Doe</h3>
-                        <p id="profile-email">john.doe@example.com</p>
-                        <button class="btn btn-secondary">Edit Profile</button>
+                        <h3 id="profile-name">Loading...</h3>
+                        <p id="profile-email">Loading...</p>
+                        <button class="btn btn-secondary" id="edit-profile-btn">Edit Profile</button>
                     </div>
                 </div>
                 
@@ -224,23 +135,23 @@
                     <h3>Account Information</h3>
                     <div class="profile-detail-row">
                         <div class="profile-detail-label">Full Name:</div>
-                        <div class="profile-detail-value" id="profile-full-name">John Doe</div>
+                        <div class="profile-detail-value" id="profile-full-name">Loading...</div>
                     </div>
                     <div class="profile-detail-row">
                         <div class="profile-detail-label">Email:</div>
-                        <div class="profile-detail-value" id="profile-email-display">john.doe@example.com</div>
+                        <div class="profile-detail-value" id="profile-email-display">Loading...</div>
                     </div>
                     <div class="profile-detail-row">
                         <div class="profile-detail-label">Phone:</div>
-                        <div class="profile-detail-value" id="profile-phone">(555) 123-4567</div>
+                        <div class="profile-detail-value" id="profile-phone">Loading...</div>
                     </div>
                     <div class="profile-detail-row">
                         <div class="profile-detail-label">Location:</div>
-                        <div class="profile-detail-value" id="profile-location">San Francisco, CA</div>
+                        <div class="profile-detail-value" id="profile-location">Loading...</div>
                     </div>
                     <div class="profile-detail-row">
                         <div class="profile-detail-label">Member Since:</div>
-                        <div class="profile-detail-value" id="profile-joined">January 15, 2023</div>
+                        <div class="profile-detail-value" id="profile-joined">Loading...</div>
                     </div>
                 </div>
                 
@@ -249,15 +160,15 @@
                     <div class="stat-boxes">
                         <div class="stat-box">
                             <h4>Events Attended</h4>
-                            <div class="stat-value">12</div>
+                            <div class="stat-value" id="profile-events-attended">0</div>
                         </div>
                         <div class="stat-box">
                             <h4>Events Created</h4>
-                            <div class="stat-value">3</div>
+                            <div class="stat-value" id="profile-events-created">0</div>
                         </div>
                         <div class="stat-box">
                             <h4>Upcoming Events</h4>
-                            <div class="stat-value">2</div>
+                            <div class="stat-value" id="profile-upcoming-events">0</div>
                         </div>
                     </div>
                 </div>
@@ -325,11 +236,56 @@
                 </form>
             </div>
         </div>
+
+        <!-- Edit Profile Modal -->
+        <div id="edit-profile-modal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Edit Profile</h2>
+                
+                <form id="profile-form">
+                    <div class="form-group">
+                        <label for="edit-first-name">First Name</label>
+                        <input type="text" id="edit-first-name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-last-name">Last Name</label>
+                        <input type="text" id="edit-last-name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-email">Email</label>
+                        <input type="email" id="edit-email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-phone">Phone</label>
+                        <input type="tel" id="edit-phone">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-location">Location</label>
+                        <input type="text" id="edit-location">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-profile-image">Profile Image</label>
+                        <input type="file" id="edit-profile-image" accept="image/*">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-profile-btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Profile</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </main>
 
     <footer>
         <div class="container">
-            <p>&copy; 2023 Event Management Platform</p>
+            <p>&copy; 2025 Event Management Platform</p>
         </div>
     </footer>
 
